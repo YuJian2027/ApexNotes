@@ -114,8 +114,9 @@ formatCard() 展示确认卡片（**核心是核对归类 + 必填选项**）：
   关键词：逻辑判断、翻译推理
   错因：粗心
   选项：你选 B ❌ / 正确 C ✅   ← **必填项**，无论 OCR 能否识别都要在此确认/补充
+  存储方式：⚠️ 请选择 → 回复「存图」或「存文字」（图推/资料默认存图）
   ────────────────
-  回复"对"确认 / "归类改成XX"修正归类 / "错因改成XX"修正错因 / "你选A正确C"补选项 / "跳过"丢弃
+  回复"对"确认 / "归类改成XX"修正归类 / "错因改成XX"修正错因 / "你选A正确C"补选项 / "存图"或"存文字"选存储 / "跳过"丢弃
   ↓
 用户确认或修正（**必须补齐 selected_option / correct_option 才能入库**）
   ↓
@@ -127,6 +128,8 @@ confirmAndSave() 入库：
 **每道单独确认**：逐道展示卡片，用户回复"对"确认 / "XX改成YY"修正 / "跳过"丢弃。
 
 > ⚠️ **选项为强制必填项**：无论 OCR / 多模态能否识别「你选的」「正确的」，确认卡片都必须显式向用户采集这两个值（展示「你选 X ❌ / 正确 Y ✅」，未识别则提示「⚠️ 未识别，请补充：你选A 正确C」）。用户未补齐 `selected_option` / `correct_option` 前，不得调用 `confirmAndSave()` 入库。
+>
+> ⚠️ **存储方式需用户选择**：图推/资料分析等含图、表的题 OCR 识别差，确认卡片展示 OCR 文字（或 `visual_description` 视觉描述）后，必须让用户显式选择「存图」或「存文字」（`parseStorageMethod()` 解析）。图推/资料默认存图；纯文字题可存文字省空间，但 `raw_image_b64` 仍保留作源。复习（review_reminder）对 `image` 题无法在纯文字推送里显示原图，会回退展示 `visual_description` 并提示去知识本/导出错题本看图。
 
 ### 第四步：遗忘曲线复习
 
@@ -152,10 +155,10 @@ confirmAndSave() 入库：
   {
     "id": "uuid",
     "date": "2026-07-17",
-    "source": "quick | quick-batch | image | ingest",
+    "source": "quick | quick-batch | image | ingest | backfill",
     "module": "判断推理",
     "subtype": "逻辑判断",
-    "question_text": "题目文字（含 A/B/C/D 选项文本）",
+    "question_text": "题目文字（含 A/B/C/D 选项文本，ABCD 各占一行存储）",
     "selected_option": "A",
     "correct_option": "B",
     "answer": "B",
@@ -164,10 +167,15 @@ confirmAndSave() 入库：
     "status": "待二刷 | 已掌握",
     "knowledge_path": "判断推理 > 逻辑判断 > 翻译推理 > 假言命题",
     "knowledge_confidence": "high | medium | low | none",
-    "knowledge_node_id": "判断推理.逻辑判断.翻译推理.假言命题"
+    "knowledge_node_id": "判断推理.逻辑判断.翻译推理.假言命题",
+    "storage_method": "image | ocr_text",
+    "raw_image_b64": "<base64 编码的错题图，图推/资料题必有；ocr_text 题也保留作源防 OCR 翻车>",
+    "visual_description": "<图推/资料题的模型视觉描述；纯文字题填 null>"
   }
 ]
 ```
+
+> **图片统一存储（重要）**：错题图**一律内嵌为 `raw_image_b64` 字段**，放在 `wrong_questions.json` 里，不再使用 `images/错题/` 文件夹（已退役）。这样整份错题数据是**单个自包含 JSON**，迁移只需复制该文件。旧格式 `image` 路径字段不再使用。
 
 > `knowledge_path` / `knowledge_confidence` / `knowledge_node_id` 三个字段由 `ingest_wrong_question.js` 编排器在入库时填充（调用 `link_questions.locateQuestion()` 定位）。通道C（自然语言打卡）不产生这些字段。
 >
@@ -176,6 +184,11 @@ confirmAndSave() 入库：
 > - `correct_option`：该题**正确答案**（如 `"B"`）
 > - `answer`：保留兼容字段，等于 `correct_option`（旧程序/导出沿用，新录入优先填 `correct_option`）
 > - 三者均由录入阶段（截图 OCR / 快捷格式 / 自然语言）提供，编排器透传落库；缺失时存 `null`
+>
+> **存储方式 `storage_method`**（用户确认卡片上选择）：
+> - `image`：图推/资料分析等含图、表的题 OCR 差 → 存 base64 原图，复习时看图
+> - `ocr_text`：纯文字题 OCR 准 → 存 `question_text`（ABCD 分行），可省空间
+> - `raw_image_b64` 对两类题**都保留**（ocr_text 也留源，防 OCR 不准时补救）
 
 ### 知识节点 `knowledge_flat.json`
 

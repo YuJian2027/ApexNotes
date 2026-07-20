@@ -67,6 +67,9 @@ function ingestQuestion(question, opts = {}) {
     keywords:              question.keywords || [],
     selected_option:       question.selected_option || null,
     correct_option:        question.correct_option || null,
+    visual_description:    question.visual_description || null,
+    raw_image_b64:         question.raw_image_b64 || null,
+    storage_method:        question.storage_method || null,
     knowledge_path:        located.path,
     knowledge_confidence:  located.confidence.level,   // high / medium / low / none
     knowledge_node_id:     located.path_id,
@@ -123,9 +126,11 @@ function confirmAndSave(confirmedCard) {
     knowledge_path:       confirmedCard.knowledge_path || null,
     knowledge_confidence: confirmedCard.knowledge_confidence || 'none',
     knowledge_node_id:    confirmedCard.knowledge_node_id || null,
+    visual_description:   confirmedCard.visual_description || null,
+    storage_method:       confirmedCard.storage_method || null,
   };
 
-  // 保留图片字段（截图场景）
+  // 保留图片字段（截图场景）：base64 内嵌为规范字段；image_path 仅过渡期兼容
   if (confirmedCard.raw_image_b64) question.raw_image_b64 = confirmedCard.raw_image_b64;
   if (confirmedCard.image_path)    question.image_path    = confirmedCard.image_path;
 
@@ -186,14 +191,28 @@ function formatCard(card) {
     lines.push(`选项：⚠️ 未识别，必填 → 请补充（格式：你选A 正确C）`);
   }
 
-  // 题干预览（判断归类是否合理的参考）
-  if (card.question_text && card.question_text.length > 5) {
+  // 题面预览（判断归类是否合理的参考）
+  // 图推/资料题 OCR 文字往往不准，优先展示视觉描述；纯文字题展示题干
+  if (card.visual_description && card.visual_description.length > 5) {
+    const preview = card.visual_description.slice(0, 80);
+    lines.push(`视觉描述：${preview}${card.visual_description.length > 80 ? '...' : ''}`);
+  } else if (card.question_text && card.question_text.length > 5) {
     const preview = card.question_text.slice(0, 80);
     lines.push(`题干：${preview}${card.question_text.length > 80 ? '...' : ''}`);
   }
 
+  // ── 存储方式（必选项，用户确认时选择）──
+  // 图推/资料分析等含图/表的题 OCR 差，建议存图；纯文字题 OCR 准，可存文字省空间
+  if (card.storage_method === 'image') {
+    lines.push(`存储方式：图（base64 内嵌，不依赖图片文件夹）`);
+  } else if (card.storage_method === 'ocr_text') {
+    lines.push(`存储方式：OCR 文字（题干+选项）`);
+  } else {
+    lines.push(`存储方式：⚠️ 请选择 → 回复「存图」或「存文字」（图推/资料默认存图）`);
+  }
+
   lines.push('────────────────');
-  lines.push('回复"对"确认 / "归类改成XX"修正归类 / "错因改成XX"修正错因 / "你选A正确C"补选项 / "跳过"丢弃');
+  lines.push('回复"对"确认 / "归类改成XX"修正归类 / "错因改成XX"修正错因 / "你选A正确C"补选项 / "存图"或"存文字"选存储 / "跳过"丢弃');
 
   return lines.join('\n');
 }
@@ -247,7 +266,7 @@ if (require.main === module) {
   });
 }
 
-module.exports = { ingestQuestion, ingestBatch, confirmAndSave, formatCard, parseOptionInput };
+module.exports = { ingestQuestion, ingestBatch, confirmAndSave, formatCard, parseOptionInput, parseStorageMethod };
 
 
 // ─────────────────────────────────────────────
@@ -276,4 +295,19 @@ function parseOptionInput(text) {
     selected_option: selMatch ? selMatch[1].toUpperCase() : null,
     correct_option:  corMatch ? corMatch[1].toUpperCase() : null,
   };
+}
+
+/**
+ * 从用户确认阶段回复中解析存储方式选择。
+ *   "存图" / "存图片" / "image" / "图" → 'image'
+ *   "存文字" / "存文本" / "ocr" / "文字" → 'ocr_text'
+ * @param {string} text  用户回复
+ * @returns {'image'|'ocr_text'|null}
+ */
+function parseStorageMethod(text) {
+  if (!text || typeof text !== 'string') return null;
+  const t = text.toLowerCase();
+  if (/存图|存图片|图片|image|图推|图表|含图/.test(t)) return 'image';
+  if (/存文字|存文本|文字|ocr|纯文字|ocr_text/.test(t))  return 'ocr_text';
+  return null;
 }

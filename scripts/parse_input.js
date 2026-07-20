@@ -83,7 +83,8 @@ const MULTIMODAL_PROMPT = `
   "answer": "正确答案字母，图片中若不可见则填 null",
   "user_annotation": "用户手写批注原文，没有填 null",
   "error_reason_hint": "知识点不会/粗心/时间不够/概念混淆/无法判断",
-  "keywords": ["知识点标签，最多3个"]
+  "keywords": ["知识点标签，最多3个"],
+  "storage_method": "存储方式建议：题目含图形/图表（图形推理/资料分析/含图定义）填 image；纯文字题（无图）填 ocr_text"
 }
 
 如果图片模糊无法识别，返回：{"error": "图片无法识别"}
@@ -179,6 +180,7 @@ async function parseImageInput(imageBase64, caption, agentCall) {
       user_annotation:    parsed.user_annotation     ?? null,
       error_reason:       parsed.error_reason_hint   ?? '未说明',
       keywords:           parsed.keywords            ?? [],
+      storage_method:     parsed.storage_method      ?? null,
     };
   } catch (e) {
     return {

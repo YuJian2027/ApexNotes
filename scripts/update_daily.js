@@ -26,13 +26,13 @@ function backupWrongQuestions(wqPath) {
   const dest   = path.join(backupDir, `wrong_questions.${ts}.json`);
   fs.copyFileSync(wqPath, dest);
 
-  // 保留最近 10 个，删除更早的
+  // 保留最近 5 个，删除更早的（错题含 base64 后单文件体积增大，减少轮换避免磁盘膨胀）
   const backups = fs.readdirSync(backupDir)
     .filter(f => f.startsWith('wrong_questions.') && f.endsWith('.json'))
     .sort()
     .reverse();
 
-  backups.slice(10).forEach(f => {
+  backups.slice(5).forEach(f => {
     try { fs.unlinkSync(path.join(backupDir, f)); } catch (_) {}
   });
 }

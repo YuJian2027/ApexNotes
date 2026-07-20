@@ -119,6 +119,38 @@ def escape_html(text):
     return html_lib.escape(text, quote=False)
 
 
+def render_question_text(text):
+    """将题干文字渲染为 HTML：题干 + 每个选项单独成行（ABCD 分行显示）。
+    自动识别 A./B./C./D. 等选项标记并切分；无清晰选项分隔时原样转义保留换行。
+    """
+    if not text:
+        return ""
+    # 按选项标记切分（保留 A. B. 等作为每段开头）
+    parts = re.split(r'(?=[A-D][.．、])', text)
+    parts = [p.strip() for p in parts if p and p.strip()]
+    if len(parts) <= 1:
+        return f'<div class="question-text">{escape_html(text)}</div>'
+    stem = parts[0]
+    opts = parts[1:]
+    html = '<div class="question-text">'
+    if stem:
+        html += f'<p class="q-stem">{escape_html(stem)}</p>'
+    html += '<div class="q-opts">'
+    for o in opts:
+        html += f'<div class="opt-line">{escape_html(o)}</div>'
+    html += '</div></div>'
+    return html
+
+
+def render_image_src(b64, img_path):
+    """返回题面图片的 src：base64 优先（data URI），否则回退 image 路径（过渡期兼容）。"""
+    if b64:
+        return f"data:image/png;base64,{b64}"
+    if img_path:
+        return img_path
+    return ""
+
+
 def render_inline(text):
     """
     将markdown行内格式转为HTML。
@@ -407,16 +439,26 @@ def gen_kb_questions(node):
         # 日期
         date_tag = f'<span class="q-tag-date">{escape_html(date)}</span>' if date else ""
 
-        # 题面：有图优先显示图；无图但有文字题干（纯文字快捷录入）时显示文字
-        if img_path:
-            body_html = (
-                f'<div class="question-image">'
-                f'<img src="{img_path}" loading="lazy" '
-                f'onerror="this.parentElement.parentElement.style.display=\'none\'" alt="错题"/></div>'
-            )
-        elif question_text and (len(question_text) > 25 or "\n" in question_text):
-            body_html = f'<div class="question-text">{escape_html(question_text)}</div>'
-        else:
+        # 题面渲染：按 storage_method 决定展示图还是文字
+        #   image 模式（图推/资料）→ 默认图；ocr_text 模式（纯文字题）→ 默认文字
+        #   base64 优先（data URI），回退 image 路径（过渡期兼容 207 道旧题）
+        b64 = r.get("raw_image_b64", "")
+        storage_method = r.get("storage_method", "")
+        want_image = bool(b64) and (storage_method != "ocr_text" or not question_text)
+        want_text  = bool(question_text) and (storage_method != "image" or not b64)
+
+        body_html = ""
+        if want_image:
+            src = render_image_src(b64, img_path)
+            if src:
+                body_html += (
+                    f'<div class="question-image">'
+                    f'<img src="{src}" loading="lazy" '
+                    f'onerror="this.parentElement.parentElement.style.display=\'none\'" alt="错题"/></div>'
+                )
+        if want_text:
+            body_html += render_question_text(question_text)
+        if not body_html:
             body_html = ""
 
         # 选项标签：你选的 vs 正确的
@@ -823,8 +865,13 @@ CSS = """  * { margin: 0; padding: 0; box-sizing: border-box; }
     padding: 10px 12px; font-size: 12px; line-height: 1.6;
     color: #2C2C2A; background: #FBFAF7;
     border-bottom: 1px solid #F0E0D8;
-    white-space: pre-wrap; word-break: break-word;
     max-height: 220px; overflow-y: auto;
+  }
+  .question-text .q-stem { margin: 0 0 6px; white-space: pre-wrap; word-break: break-word; }
+  .question-text .q-opts { display: flex; flex-direction: column; gap: 3px; }
+  .question-text .opt-line {
+    white-space: pre-wrap; word-break: break-word;
+    padding: 3px 8px; border-radius: 4px; background: #FFFDF7; border: 1px solid #F0E0D8;
   }
   .question-meta {
     padding: 8px 12px; font-size: 11px;
