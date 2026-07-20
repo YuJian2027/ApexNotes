@@ -1,0 +1,5 @@
+# ApexNotes Python 依赖
+# Excel 导出（scripts/export_xlsx.js）通过临时 Python 脚本调用 openpyxl，
+# 图片嵌入依赖 Pillow 的 XLImage。HTML 导出（build_unified_html.py）是纯标准库，无需本文件。
+openpyxl>=3.1.0
+Pillow>=10.0.0

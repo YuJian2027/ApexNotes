@@ -16,6 +16,8 @@ echo -e "${BLUE}  考公备考追踪工具${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 
+SKILL_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # ─── 检测 Node.js ─────────────────────────────────────────────
 echo -e "${YELLOW}[1/4] 检测 Node.js...${NC}"
 if command -v node &> /dev/null; then
@@ -52,16 +54,30 @@ fi
 # ─── 安装依赖 ─────────────────────────────────────────────────
 echo -e "${YELLOW}[3/4] 安装依赖...${NC}"
 
-# Node.js 依赖（核心脚本是纯 Node.js，无额外 npm 包）
-echo -e "  Node.js 脚本无需额外依赖（仅使用内置模块）"
-
-# Python 依赖（Excel 导出）
-if [ -n "$PYTHON_CMD" ]; then
-    echo -e "  安装 openpyxl（Excel 导出）..."
-    $PYTHON_CMD -m pip install openpyxl -q 2>/dev/null || {
-        echo -e "  ${YELLOW}⚠ openpyxl 安装失败，Excel 导出功能不可用${NC}"
-        echo "    手动安装: pip install openpyxl"
+# Node.js 依赖（sharp：错题图批量重压优化，可选）
+if [ -f "$SKILL_DIR/package.json" ]; then
+    echo -e "  安装 Node 依赖（sharp）..."
+    (cd "$SKILL_DIR" && npm install --no-audit --no-fund) 2>/dev/null || {
+        echo -e "  ${YELLOW}⚠ npm install 失败，图片重压功能不可用（不影响核心）${NC}"
     }
+fi
+
+# Python 依赖（Excel 导出：openpyxl + Pillow）
+# 必须覆盖 export_xlsx.js 实际会选用的所有 Python 候选，否则导出时找不到 Pillow
+PY_CANDIDATES=(
+  "$SKILL_DIR/.venv/bin/python3"
+  "$HOME/.workbuddy/binaries/python/envs/default/bin/python3"
+  "python3"
+  "python"
+)
+if [ -f "$SKILL_DIR/requirements.txt" ]; then
+    for py in "${PY_CANDIDATES[@]}"; do
+        if [ -x "$py" ]; then
+            echo -e "  为 $py 安装 Python 依赖（openpyxl + Pillow）..."
+            "$py" -m pip install -r "$SKILL_DIR/requirements.txt" -q 2>/dev/null || \
+                echo -e "  ${YELLOW}⚠ $py 依赖安装失败${NC}"
+        fi
+    done
 fi
 
 # ─── 初始化数据目录与知识框架 ─────────────────────────────────
@@ -70,7 +86,6 @@ DATA_DIR="${APEXNOTES_DATA_DIR:-$HOME/.apexnotes/data}"
 mkdir -p "$DATA_DIR/daily" "$DATA_DIR/exports" "$DATA_DIR/backups"
 
 # 复制示例配置（如不存在）
-SKILL_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ ! -f "$SKILL_DIR/config.json" ]; then
     cp "$SKILL_DIR/assets/config.example.json" "$SKILL_DIR/config.json" 2>/dev/null || true
     echo -e "  已创建 config.json（可编辑配置飞书同步等高级功能）"

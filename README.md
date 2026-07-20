@@ -53,9 +53,21 @@ cd ApexNotes
 bash install.sh
 ```
 
-脚本会自动完成：检测 Node.js（≥18）→ 安装 openpyxl（Excel 导出，可选）→ 建数据目录 + **初始空错题库** + 解析 472 节点知识框架。
+脚本会自动完成：检测 Node.js（≥18）→ `npm install`（sharp，图片重压优化）→ 安装 Python 依赖 openpyxl+Pillow（Excel 导出需要）→ 建数据目录 + **初始空错题库** + 解析 472 节点知识框架。
 
-> 手动安装也行：`pip install openpyxl` → `node scripts/init_demo.js`
+> 手动安装也行：`pip install -r requirements.txt` → `node scripts/init_demo.js`（仅需要 Excel 导出时）
+
+**依赖清单：**
+
+| 依赖 | 类型 | 用途 | 是否必需 |
+|------|------|------|----------|
+| Node.js ≥18 | 运行时 | 核心脚本（录入 / 复习 / HTML 导出） | 必需 |
+| `sharp` (npm) | Node 包 | 错题图批量重压（800px/jpeg80，省空间） | 可选（不装也能跑，图更大） |
+| Python 3.x | 运行时 | 仅 Excel 导出时调用 | 仅 xlsx 导出必需 |
+| `openpyxl` | Python 包 | 生成 .xlsx 错题本 | 仅 xlsx 导出必需 |
+| `Pillow` | Python 包 | openpyxl 嵌入图片依赖（`XLImage`） | 仅 xlsx 导出必需 |
+
+> 数据存储完全独立于项目文件夹（见下文），克隆后 `bash install.sh` 即建立你自己的空错题库，不含他人错题。
 
 ### 2. 交给你的 agent
 
