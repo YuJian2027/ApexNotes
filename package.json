@@ -22,5 +22,8 @@
     "summary": "node scripts/daily_summary.js",
     "setup:ocr": "pip install paddlepaddle paddleocr",
     "setup:ocr:cn": "pip install paddlepaddle paddleocr -i https://pypi.tuna.tsinghua.edu.cn/simple"
+  },
+  "dependencies": {
+    "sharp": "^0.35.3"
   }
 }

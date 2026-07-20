@@ -21,6 +21,7 @@ import os
 import re
 import json
 import hashlib
+import base64
 import html as html_lib
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -145,7 +146,22 @@ def render_question_text(text):
 def render_image_src(b64, img_path):
     """返回题面图片的 src：base64 优先（data URI），否则回退 image 路径（过渡期兼容）。"""
     if b64:
-        return f"data:image/png;base64,{b64}"
+        # 按 magic byte 探测真实格式，生成正确 MIME 前缀（重压后多为 jpeg）
+        try:
+            raw = base64.b64decode(b64[:20])
+        except Exception:
+            raw = b""
+        if raw[:8] == b"\x89PNG\r\n\x1a\n":
+            mime = "image/png"
+        elif raw[:2] == b"\xff\xd8":
+            mime = "image/jpeg"
+        elif raw[:4] == b"GIF8":
+            mime = "image/gif"
+        elif raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+            mime = "image/webp"
+        else:
+            mime = "image/png"  # 兜底
+        return f"data:{mime};base64,{b64}"
     if img_path:
         return img_path
     return ""
