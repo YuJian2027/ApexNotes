@@ -113,8 +113,15 @@ function pickDueQuestions(maxPerDay = MAX_PER_DAY) {
 
 function formatQuestion(q) {
   const lines = [`[${q.module} · ${q.subtype || ''}]`];
-  if (q.question_text) lines.push(q.question_text.slice(0, 200));
-  if (q.visual_description) lines.push(`图形描述：${q.visual_description.slice(0, 150)}`);
+  // 与知识本一致：图为主。图推/资料类题不发「可能识别错的 OCR 纯文字」，
+  // 而是提示对照原图 + 附视觉描述；纯文字题（ocr_text）才发 OCR 文本。
+  const isImageQuestion = q.storage_method !== 'ocr_text' && !!q.raw_image_b64;
+  if (isImageQuestion) {
+    lines.push('📷 图形题（图推 / 资料 / 含图）：请对照知识本中的原题图片作答');
+    if (q.visual_description) lines.push(`图形描述：${q.visual_description.slice(0, 150)}`);
+  } else if (q.question_text) {
+    lines.push(q.question_text.slice(0, 200));
+  }
   if (q.answer) lines.push(`正确答案：${q.answer}`);
   lines.push(`知识点：${(q.keywords || []).join('、') || '未标记'}`);
   return lines.join('\n');

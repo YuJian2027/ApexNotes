@@ -426,6 +426,9 @@ STATUS_CSS = {
     "已掌握": "mastered",
 }
 
+# 状态下拉可选项（与 STATUS_CSS 键保持一致；HTML 页面下拉修改时回写 JSON）
+STATUS_OPTIONS = ["待二刷", "复习中", "已掌握"]
+
 
 def gen_kb_questions(node):
     """生成节点的kb-questions HTML（右栏错题卡片，从 wrong_records 渲染）"""
@@ -438,44 +441,53 @@ def gen_kb_questions(node):
         question_text = r.get("question_text", "")
         wq_id = r.get("id", "?")
         reason = r.get("error_reason", "未标注")
-        status = r.get("status", "pending")
+        status = r.get("status") or "待二刷"
         date = r.get("date", "")
         confidence = r.get("knowledge_confidence", "")
 
         fg, bg = REASON_STYLES.get(reason, DEFAULT_REASON_STYLE)
-        status_css = STATUS_CSS.get(status, "pending")
 
-        # 错因标签
+        # 错因标签（加「错因：」前缀，便于用户直接阅读）
         reason_tag = (
             f'<span class="q-tag-reason" style="color:{fg};background:{bg}">'
-            f'{escape_html(reason)}</span>'
+            f'错因：{escape_html(reason)}</span>'
         )
-        # 状态标签（直接显示原始中文值，CSS类用映射）
+        # 状态标签（静态展示，状态修改在 JSON 源文件中维护）
+        status_css = STATUS_CSS.get(status, "pending")
         status_tag = f'<span class="q-tag-status status-{status_css}">{escape_html(status)}</span>'
         # 日期
         date_tag = f'<span class="q-tag-date">{escape_html(date)}</span>' if date else ""
 
-        # 题面渲染：按 storage_method 决定展示图还是文字
-        #   image 模式（图推/资料）→ 默认图；ocr_text 模式（纯文字题）→ 默认文字
-        #   base64 优先（data URI），回退 image 路径（过渡期兼容 207 道旧题）
+        # 题面渲染：图为主 + OCR 作补充
+        #   图（raw_image_b64）是源，永远显示；question_text（OCR）永远作补充，绝不隐藏。
+        #   storage_method 不再隐藏任何内容，仅决定侧重顺序：
+        #     image 模式 → 图在上、OCR 小字补充在下（默认）
+        #     ocr_text 模式 → OCR 文字在上、图在下（侧重文字，但图仍可见，防 OCR 翻车）
         b64 = r.get("raw_image_b64", "")
         storage_method = r.get("storage_method", "")
-        want_image = bool(b64) and (storage_method != "ocr_text" or not question_text)
-        want_text  = bool(question_text) and (storage_method != "image" or not b64)
+        has_image = bool(b64)
+        has_text  = bool(question_text)
 
-        body_html = ""
-        if want_image:
+        image_html = ""
+        if has_image:
             src = render_image_src(b64, img_path)
             if src:
-                body_html += (
+                image_html = (
                     f'<div class="question-image">'
                     f'<img src="{src}" loading="lazy" '
                     f'onerror="this.parentElement.parentElement.style.display=\'none\'" alt="错题"/></div>'
                 )
-        if want_text:
-            body_html += render_question_text(question_text)
-        if not body_html:
-            body_html = ""
+        text_html = render_question_text(question_text)
+
+        if storage_method == "ocr_text" and image_html and text_html:
+            # 侧重文字：OCR 在上、图在下
+            body_html = text_html + image_html
+        elif image_html and text_html:
+            # 图为主：OCR 降级为小字补充（加 class 用于浅色样式）
+            text_html = text_html.replace('<div class="question-text">', '<div class="question-text ocr-supplement">', 1)
+            body_html = image_html + text_html
+        else:
+            body_html = image_html + text_html
 
         # 选项标签：你选的 vs 正确的
         selected_opt = r.get("selected_option", "")
@@ -498,7 +510,6 @@ def gen_kb_questions(node):
             f'{body_html}'
             f'{option_html}'
             f'<div class="question-meta">'
-            f'<span class="q-id">#{escape_html(str(wq_id))}</span>'
             f'{reason_tag}{status_tag}{date_tag}'
             f'</div>'
             f'</div>'
@@ -883,6 +894,16 @@ CSS = """  * { margin: 0; padding: 0; box-sizing: border-box; }
     border-bottom: 1px solid #F0E0D8;
     max-height: 220px; overflow-y: auto;
   }
+  /* OCR 文本作为小字补充（图为主模式下显示于图下方） */
+  .question-text.ocr-supplement {
+    margin-top: 8px; padding: 8px 10px; max-height: 160px;
+    font-size: 11px; line-height: 1.5; color: #6B6358;
+    background: #FAF7F1; border: 1px dashed #E3DAC9; border-radius: 8px;
+  }
+  .question-text.ocr-supplement::before {
+    content: "识别文字"; display: block; margin-bottom: 4px;
+    font-size: 10px; font-weight: 700; letter-spacing: .5px; color: #9A8F7C;
+  }
   .question-text .q-stem { margin: 0 0 6px; white-space: pre-wrap; word-break: break-word; }
   .question-text .q-opts { display: flex; flex-direction: column; gap: 3px; }
   .question-text .opt-line {
@@ -1113,7 +1134,8 @@ JS = """  function toggleNode(event, nodeId) {
              '<div class="search-result-module">' + m.module + (m.inLabel?'':' · 正文') + '</div>' +
              '</div>';
     }).join('');
-  }"""
+  }
+  """
 
 
 # ─── 主函数 ────────────────────────────────────────────────

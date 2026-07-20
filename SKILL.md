@@ -41,9 +41,8 @@ description: >
 | `scripts/update_daily.js` | 写入每日记录 + 统计缓存 + 错题存档/备份 + 入库累加 | 程序化调用 |
 | `scripts/build_unified_html.py` | 生成 HTML 知识本（三面板+全文搜索+挂载错题） | `python scripts/build_unified_html.py` |
 | `scripts/export_xlsx.js` | 导出 Excel 错题本（含知识路径列、每日记录 sheet） | `node scripts/export_xlsx.js` |
-| `scripts/daily_summary.js` | 晚间总结：打卡统计 + 错因分析 + 建议 | 程序化调用 / automation |
 | `scripts/weekly_report.js` | 周报：错因趋势 + 弱项模块 | 程序化调用 / automation |
-| `scripts/error_reason_advisor.js` | 4种错因建议库 + 分布统计 | 被 daily_summary/weekly_report 调用 |
+| `scripts/error_reason_advisor.js` | 4种错因建议库 + 分布统计 | 被 weekly_report 调用 |
 | `scripts/review_reminder.js` | 遗忘曲线复习提醒：抽到期题 → 推送 → 处理回复 → 标记已掌握 | 程序化调用 / cron |
 | `scripts/init_demo.js` | 项目初始化：建数据目录 + 空错题库 + 解析知识框架（install.sh 自动调用） | `node scripts/init_demo.js` |
 
@@ -139,10 +138,25 @@ confirmAndSave() 入库：
 - 走完整个周期（8 次）自动标记为"已掌握"
 - 调度引擎见 `eb_schedule.js`（纯函数：initState / processReview / isDue 等）
 
+### 自动化创建（首次加载技能必做）
+
+艾宾浩斯复习是**每日定时**任务，最优落地是在宿主 Agent 上创建**自动化程序**，用户零操作即可每天收到复习提醒。Agent 首次加载本 skill 时**必须主动完成以下初始化**：
+
+1. **询问用户复习提醒时间**（软默认 20:00），例如："每天几点提醒你复习？默认 20:00。"
+2. **调用宿主 Agent 自身的自动化能力**，创建每日定时任务：
+   - 触发：每日 `用户指定时间`（RRULE `FREQ=DAILY` 或 cron `0 20 * * *`）
+   - 动作：运行 `node scripts/review_reminder.js` 抽取当天到期题，按 `formatQuestionWithProgress` 逐题推送，并等待用户回复"记得/不记得"
+   - 任务名建议：`ApexNotes 艾宾浩斯复习`
+3. **反馈闭环**由自动化推送驱动：用户回复 → Agent 调 `review_reminder.handleReviewReply()` 推进遗忘曲线（记得→stage+1，忘了→重置）。
+4. **降级兜底**：若宿主 Agent 环境不支持自动化（纯命令行/无自动化能力），退化成"用户手动每天跑一次 `node scripts/review_reminder.js`"，并在首次加载时告知用户。
+
+> ⚠️ 此自动化由 Agent 在对话中创建，**不是 install.sh 创建**（shell 无法创建宿主 Agent 的自动化程序）。
+
 ### 第五步：导出
 
 - **Excel 错题本**：`export_xlsx.js`，含知识路径列、原图嵌入、两个 Sheet
 - **HTML 知识本**：`build_unified_html.py`，三面板（导航树+图文流+错题卡片）+ 全文搜索
+  - 错题卡片的 meta 行显示「错因：xxx」+ 复习状态标签（待二刷/复习中/已掌握），**不再显示题目 ID**（对用户无意义）。状态修改在 JSON 源文件中维护，HTML 为只读展示。
 
 ---
 
@@ -164,7 +178,7 @@ confirmAndSave() 入库：
     "answer": "B",
     "error_reason": "知识点不会 | 粗心 | 时间不够 | 概念混淆",
     "keywords": ["假言命题"],
-    "status": "待二刷 | 已掌握",
+    "status": "待二刷 | 复习中 | 已掌握",
     "knowledge_path": "判断推理 > 逻辑判断 > 翻译推理 > 假言命题",
     "knowledge_confidence": "high | medium | low | none",
     "knowledge_node_id": "判断推理.逻辑判断.翻译推理.假言命题",
@@ -242,7 +256,6 @@ confirmAndSave() 入库：
 | `scripts/update_daily.js` | 每日记录 + 错题存储 + 入库累加 |
 | `scripts/build_unified_html.py` | HTML 知识本生成（三面板+全文搜索） |
 | `scripts/export_xlsx.js` | Excel 导出 |
-| `scripts/daily_summary.js` | 晚间总结（含错因分析） |
 | `scripts/weekly_report.js` | 周报（错因趋势） |
 | `scripts/error_reason_advisor.js` | 错因建议库 |
 | `scripts/review_reminder.js` | 遗忘曲线复习提醒（抽到期题→推送→处理回复→标记已掌握） |
